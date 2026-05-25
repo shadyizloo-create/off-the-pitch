@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Football League Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen">
+  <div class="flex h-screen overflow-hidden">
+    <aside class="w-72 bg-black border-r border-gray-800 p-5 overflow-y-auto">
+      <h1 class="text-3xl font-bold mb-4 text-green-400">League Manager</h1>
+
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-6">
+        <p id="authStatus" class="text-xs text-gray-400 mb-2">Viewer mode</p>
+        <p id="authError" class="text-xs text-red-400 mb-3"></p>
+        <button id="loginBtn" onclick="loginWithGoogle()" class="w-full bg-green-500 hover:bg-green-600 p-2 rounded-lg font-bold text-sm mb-2">Admin Login</button>
+        <button id="logoutBtn" onclick="logoutAdmin()" class="w-full bg-gray-700 hover:bg-gray-600 p-2 rounded-lg font-bold text-sm hidden">Logout</button>
+      </div>
+
+      <nav class="space-y-3">
+        <button onclick="showSection('dashboard')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Dashboard</button>
+        <button onclick="showSection('teams')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Teams & Players</button>
+        <button onclick="showSection('fixturesDivision1')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Division 1 Fixtures</button>
+        <button onclick="showSection('fixturesDivision2')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Division 2 Fixtures</button>
+        <button onclick="showSection('tableDivision1')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Division 1 Table</button>
+        <button onclick="showSection('tableDivision2')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Division 2 Table</button>
+        <button onclick="showSection('clubPages')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Club Pages</button>
+        <button onclick="showSection('playerProfiles')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Player Profiles</button>
+        <button onclick="showSection('leaderboards')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Leaderboards</button>
+        <button onclick="showSection('awards')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Awards</button>
+        <button onclick="showSection('seasonArchive')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Season Archive</button>
+        <button onclick="showSection('transfers')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Transfers</button>
+        <button onclick="showSection('export')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl text-left">Export / Reset</button>
+      </nav>
+
+      <div class="mt-10 adminOnly hidden">
+        <h2 class="font-bold mb-3 text-xl">Upload Excel Files</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-gray-400">Division 1 Players</label>
+            <input type="file" id="division1PlayersFile" accept=".xlsx,.xls" class="w-full mt-1 bg-gray-900 p-2 rounded-lg" />
+          </div>
+          <div>
+            <label class="text-sm text-gray-400">Division 2 Players</label>
+            <input type="file" id="division2PlayersFile" accept=".xlsx,.xls" class="w-full mt-1 bg-gray-900 p-2 rounded-lg" />
+          </div>
+          <div>
+            <label class="text-sm text-gray-400">Division 1 Fixtures</label>
+            <input type="file" id="division1FixturesFile" accept=".xlsx,.xls" class="w-full mt-1 bg-gray-900 p-2 rounded-lg" />
+          </div>
+          <div>
+            <label class="text-sm text-gray-400">Division 2 Fixtures</label>
+            <input type="file" id="division2FixturesFile" accept=".xlsx,.xls" class="w-full mt-1 bg-gray-900 p-2 rounded-lg" />
+          </div>
+          <button onclick="loadExcelData()" class="w-full bg-green-500 hover:bg-green-600 p-3 rounded-xl font-bold">Import Excel Data</button>
+          <p id="importStatus" class="text-sm text-gray-400"></p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-8">
+      <section id="dashboard" class="section">
+        <h2 class="text-4xl font-bold mb-6">Dashboard</h2>
+        <div class="grid grid-cols-4 gap-6">
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800"><h3 class="text-gray-400">Division 1 Teams</h3><p id="div1Count" class="text-5xl font-bold mt-3">0</p></div>
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800"><h3 class="text-gray-400">Division 2 Teams</h3><p id="div2Count" class="text-5xl font-bold mt-3">0</p></div>
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800"><h3 class="text-gray-400">Players</h3><p id="playerCount" class="text-5xl font-bold mt-3">0</p></div>
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800"><h3 class="text-gray-400">Fixtures</h3><p id="fixtureCount" class="text-5xl font-bold mt-3">0</p></div>
+        </div>
+
+        <div class="mt-8 grid grid-cols-3 gap-6">
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+            <h3 class="text-2xl font-bold mb-4 text-yellow-400">Golden Boot Race</h3>
+            <div id="dashboardTopScorer"></div>
+          </div>
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+            <h3 class="text-2xl font-bold mb-4 text-blue-400">Playmaker Race</h3>
+            <div id="dashboardTopAssist"></div>
+          </div>
+          <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+            <h3 class="text-2xl font-bold mb-4 text-green-400">Golden Glove Race</h3>
+            <div id="dashboardTopCleanSheet"></div>
+          </div>
+        </div>
+
+        <div class="mt-8 bg-gray-900 p-6 rounded-2xl border border-gray-800">
+          <h3 class="text-2xl font-bold mb-4">Latest Results</h3>
+          <div id="dashboardLatestResults" class="grid grid-cols-2 gap-4"></div>
+        </div>
+      </section>
+
+      <section id="teams" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Teams & Players</h2>
+        <div id="teamsContainer" class="grid grid-cols-2 gap-6"></div>
+      </section>
+
+      <section id="fixturesDivision1" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Division 1 Fixtures</h2>
+        <div id="fixturesDivision1Container" class="space-y-4"></div>
+      </section>
+
+      <section id="fixturesDivision2" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Division 2 Fixtures</h2>
+        <div id="fixturesDivision2Container" class="space-y-4"></div>
+      </section>
+
+      <section id="tableDivision1" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Division 1 Table</h2>
+        <table class="w-full bg-gray-900 rounded-xl overflow-hidden">
+          <thead class="bg-green-500 text-black"><tr><th class="p-3">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
+          <tbody id="division1Table"></tbody>
+        </table>
+      </section>
+
+      <section id="tableDivision2" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Division 2 Table</h2>
+        <table class="w-full bg-gray-900 rounded-xl overflow-hidden">
+          <thead class="bg-green-500 text-black"><tr><th class="p-3">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
+          <tbody id="division2Table"></tbody>
+        </table>
+      </section>
+
+      <section id="matchCenter" class="section hidden">
+        <h2 id="matchTitle" class="text-4xl font-bold mb-6">Match Center</h2>
+
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 max-w-7xl">
+          <div class="grid grid-cols-3 gap-6 mb-8 items-center text-center">
+            <div>
+              <div id="homeTeamNameBig" class="text-3xl font-bold text-green-400">Home</div>
+            </div>
+
+            <div class="bg-black rounded-2xl p-6 border border-gray-800">
+              <div class="text-gray-400 mb-2">Auto Score</div>
+              <div class="text-6xl font-black">
+                <span id="autoHomeScore">0</span>
+                <span class="text-gray-500"> - </span>
+                <span id="autoAwayScore">0</span>
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Score is calculated from player goals</p>
+            </div>
+
+            <div>
+              <div id="awayTeamNameBig" class="text-3xl font-bold text-blue-400">Away</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8">
+            <div>
+              <h3 id="homeStatsTitle" class="text-2xl font-bold mb-4 text-green-400">Home Team Sheet</h3>
+              <div class="grid grid-cols-12 gap-2 text-xs text-gray-400 mb-2 px-3">
+                <div class="col-span-1">Start</div>
+                <div class="col-span-4">Player</div>
+                <div class="col-span-1">Pos</div>
+                <div class="col-span-1">OVR</div>
+                <div class="col-span-1">G</div>
+                <div class="col-span-1">A</div>
+                <div class="col-span-2">Rating ✓</div>
+                <div class="col-span-1">CS</div>
+              </div>
+              <div id="homeStatsContainer" class="space-y-2"></div>
+            </div>
+
+            <div>
+              <h3 id="awayStatsTitle" class="text-2xl font-bold mb-4 text-blue-400">Away Team Sheet</h3>
+              <div class="grid grid-cols-12 gap-2 text-xs text-gray-400 mb-2 px-3">
+                <div class="col-span-1">Start</div>
+                <div class="col-span-4">Player</div>
+                <div class="col-span-1">Pos</div>
+                <div class="col-span-1">OVR</div>
+                <div class="col-span-1">G</div>
+                <div class="col-span-1">A</div>
+                <div class="col-span-2">Rating ✓</div>
+                <div class="col-span-1">CS</div>
+              </div>
+              <div id="awayStatsContainer" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <div class="mt-8 bg-gray-950 p-5 rounded-2xl border border-gray-800">
+            <h3 class="text-xl font-bold mb-2">Clean Sheet Rule</h3>
+            <p class="text-gray-400 text-sm">
+              Clean sheets are given automatically only to checked starters from the team that conceded 0 goals.
+              Eligible positions: GK, CB, LB, RB, LWB, RWB, CDM.
+            </p>
+          </div>
+
+          <button onclick="submitResult()" class="adminOnly mt-8 bg-yellow-500 hover:bg-yellow-600 text-black px-8 py-4 rounded-xl font-bold text-lg hidden">
+            Save Match Result
+          </button>
+        </div>
+      </section>
+
+      <section id="clubPages" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Club Pages</h2>
+        <div class="mb-6 flex gap-4">
+          <select id="clubSelect" onchange="renderClubPage()" class="bg-gray-900 p-3 rounded-xl min-w-[300px]"></select>
+        </div>
+        <div id="clubPageContainer"></div>
+      </section>
+
+      <section id="playerProfiles" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Player Profiles</h2>
+        <div class="mb-6 flex gap-4">
+          <input id="playerSearchInput" onkeyup="renderPlayerProfileList()" placeholder="Search player..." class="bg-gray-900 p-3 rounded-xl min-w-[300px]" />
+        </div>
+        <div id="playerProfileList" class="grid grid-cols-3 gap-4"></div>
+        <div id="playerProfileDetails" class="mt-8"></div>
+      </section>
+
+      <section id="leaderboards" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Leaderboards</h2>
+
+        <div class="flex flex-wrap gap-3 mb-6">
+          <button onclick="showLeaderboardTab('div1Goals')" class="bg-gray-800 hover:bg-green-500 px-4 py-2 rounded-lg">Div 1 Goals</button>
+          <button onclick="showLeaderboardTab('div1Assists')" class="bg-gray-800 hover:bg-green-500 px-4 py-2 rounded-lg">Div 1 Assists</button>
+          <button onclick="showLeaderboardTab('div1CleanSheets')" class="bg-gray-800 hover:bg-green-500 px-4 py-2 rounded-lg">Div 1 Clean Sheets</button>
+          <button onclick="showLeaderboardTab('div1Ratings')" class="bg-gray-800 hover:bg-green-500 px-4 py-2 rounded-lg">Div 1 Ratings</button>
+
+          <button onclick="showLeaderboardTab('div2Goals')" class="bg-gray-800 hover:bg-blue-500 px-4 py-2 rounded-lg">Div 2 Goals</button>
+          <button onclick="showLeaderboardTab('div2Assists')" class="bg-gray-800 hover:bg-blue-500 px-4 py-2 rounded-lg">Div 2 Assists</button>
+          <button onclick="showLeaderboardTab('div2CleanSheets')" class="bg-gray-800 hover:bg-blue-500 px-4 py-2 rounded-lg">Div 2 Clean Sheets</button>
+          <button onclick="showLeaderboardTab('div2Ratings')" class="bg-gray-800 hover:bg-blue-500 px-4 py-2 rounded-lg">Div 2 Ratings</button>
+
+          <button onclick="showLeaderboardTab('allGoals')" class="bg-gray-800 hover:bg-yellow-500 px-4 py-2 rounded-lg">All Goals</button>
+          <button onclick="showLeaderboardTab('allAssists')" class="bg-gray-800 hover:bg-yellow-500 px-4 py-2 rounded-lg">All Assists</button>
+          <button onclick="showLeaderboardTab('allCleanSheets')" class="bg-gray-800 hover:bg-yellow-500 px-4 py-2 rounded-lg">All Clean Sheets</button>
+          <button onclick="showLeaderboardTab('allRatings')" class="bg-gray-800 hover:bg-yellow-500 px-4 py-2 rounded-lg">All Ratings</button>
+        </div>
+
+        <div id="leaderboardContainer" class="bg-gray-900 border border-gray-800 rounded-2xl p-6"></div>
+      </section>
+
+      <section id="awards" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Season Awards</h2>
+        <div id="awardsContainer" class="grid grid-cols-3 gap-6"></div>
+      </section>
+
+      <section id="seasonArchive" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Season Archive & Utilities</h2>
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-6">
+          <h3 class="text-2xl font-bold mb-4">Season Tools</h3>
+          <button onclick="exportSeasonArchive()" class="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-xl font-bold mr-4">Export Season Archive JSON</button>
+          <button onclick="downloadMatchReports()" class="bg-blue-500 hover:bg-blue-600 px-6 py-3 rounded-xl font-bold mr-4">Download Match Reports</button>
+          <button onclick="showPromotionRelegationPreview()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded-xl font-bold">Promotion/Relegation Preview</button>
+        </div>
+        <div id="seasonArchiveContainer"></div>
+      </section>
+
+      <section id="transfers" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Transfer Management</h2>
+        <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 max-w-4xl">
+          <div class="grid grid-cols-2 gap-6">
+            <select id="transferPlayer" class="bg-gray-800 p-3 rounded-xl"></select>
+            <select id="newClub" class="bg-gray-800 p-3 rounded-xl"></select>
+          </div>
+          <button onclick="transferPlayer()" class="adminOnly mt-6 bg-blue-500 hover:bg-blue-600 px-8 py-3 rounded-xl font-bold hidden">Complete Transfer</button>
+          <hr class="my-8 border-gray-700" />
+          <h3 class="text-2xl font-bold mb-4">Add New Player</h3>
+          <div class="grid grid-cols-2 gap-6">
+            <input type="text" id="newPlayerName" placeholder="Player Name" class="bg-gray-800 p-3 rounded-xl" />
+            <select id="newPlayerTeam" class="bg-gray-800 p-3 rounded-xl"></select>
+            <input type="text" id="newPlayerPosition" placeholder="Position" class="bg-gray-800 p-3 rounded-xl" />
+            <input type="number" id="newPlayerRating" placeholder="Rating" class="bg-gray-800 p-3 rounded-xl" />
+          </div>
+          <button onclick="addPlayer()" class="adminOnly mt-6 bg-purple-500 hover:bg-purple-600 px-8 py-3 rounded-xl font-bold hidden">Add Player</button>
+        </div>
+      </section>
+
+      <section id="export" class="section hidden">
+        <h2 class="text-4xl font-bold mb-6">Export / Reset</h2>
+        <button onclick="exportPlayers()" class="bg-green-500 hover:bg-green-600 px-8 py-4 rounded-xl font-bold mr-4">Download Complete Stats</button>
+        <button onclick="exportTables()" class="bg-blue-500 hover:bg-blue-600 px-8 py-4 rounded-xl font-bold mr-4">Download League Tables</button>
+        <button onclick="resetDatabase()" class="adminOnly bg-red-500 hover:bg-red-600 px-8 py-4 rounded-xl font-bold hidden">Reset All Data</button>
+      </section>
+    </main>
+  </div>
+
+<script>
+let teams = [];
+let players = [];
+let fixtures = [];
+let selectedFixtureId = null;
+let editingOldResult = null;
+
+// ONLINE DATABASE SETUP
+// Paste your Firebase web app config below.
+// When these values are filled, the app saves online to Firebase Firestore.
+// When left blank, the app uses localStorage only.
+const firebaseConfig = {
+  apiKey: "AIzaSyDAM32CWZ-Vows6IY21T7VKHEfrJ9bkuaI",
+  authDomain: "off-the-pitch-dc446.firebaseapp.com",
+  projectId: "off-the-pitch-dc446",
+  storageBucket: "off-the-pitch-dc446.firebasestorage.app",
+  messagingSenderId: "569324485929",
+  appId: "1:569324485929:web:0a4722a352db1e0ba18b38",
+  measurementId: "G-QNRR84X5XE"
+};
+
+let db = null;
+let auth = null;
+let onlineMode = false;
+let currentUser = null;
+let isAdmin = false;
+const ADMIN_EMAILS = [
+  'thestatpaddingcorp@gmail.com'
+];
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+const LEAGUE_DOC_ID = 'main_league_data';
+
+function initFirebase() {
+  const configReady = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('PASTE_');
+
+  if (!configReady) {
+    console.log('Firebase config not filled. Using localStorage mode.');
+    onlineMode = false;
+    return;
+  }
+
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    db = firebase.firestore();
+    auth = firebase.auth();
+    onlineMode = true;
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      isAdmin = !!user && ADMIN_EMAILS.map(normalizeEmail).includes(normalizeEmail(user.email));
+      updateAdminUI();
+    });
+    console.log('Firebase online mode enabled.');
+  } catch (error) {
+    console.error('Firebase failed. Falling back to localStorage.', error);
+    onlineMode = false;
+  }
+}
+
+function updateAdminUI() {
+  const authStatus = document.getElementById('authStatus');
+  const authError = document.getElementById('authError');
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  if (authError && isAdmin) authError.innerText = '';
+
+  if (authStatus) {
+    if (isAdmin && currentUser) {
+      authStatus.innerText = `Admin mode: ${currentUser.email}`;
+    } else if (currentUser) {
+      authStatus.innerText = `Viewer only: ${currentUser.email} | Admin required: ${ADMIN_EMAILS.join(', ')}`;
+    } else {
+      authStatus.innerText = onlineMode ? 'Viewer mode. Login to edit.' : 'Local mode. Firebase not connected.';
+    }
+  }
+
+  if (loginBtn) loginBtn.classList.toggle('hidden', !!currentUser);
+  if (logoutBtn) logoutBtn.classList.toggle('hidden', !currentUser);
+
+  document.querySelectorAll('.adminOnly').forEach(el => {
+    if (isAdmin) {
+      el.classList.remove('hidden');
+      el.disabled = false;
+      el.style.pointerEvents = 'auto';
+      el.style.opacity = '1';
+    } else {
+      el.classList.add('hidden');
+      el.disabled = true;
+      el.style.pointerEvents = 'none';
+      el.style.opacity = '0.4';
+    }
+  });
+}
+
+function requireAdmin() {
+  if (!onlineMode) return true;
+  if (isAdmin) return true;
+  alert(`Only the admin account can edit this league.
+
+Logged in as: ${currentUser ? currentUser.email : 'Not logged in'}
+Admin email required: ${ADMIN_EMAILS.join(', ')}`);
+  return false;
+}
+
+async function loginWithGoogle() {
+  const authError = document.getElementById('authError');
+  const authStatus = document.getElementById('authStatus');
+
+  if (authError) authError.innerText = '';
+  if (authStatus) authStatus.innerText = 'Opening Google login...';
+
+  try {
+    if (!auth && firebase.apps.length) auth = firebase.auth();
+
+    if (!onlineMode || !auth) {
+      const msg = 'Firebase is not connected. Check firebaseConfig in the HTML.';
+      if (authError) authError.innerText = msg;
+      if (authStatus) authStatus.innerText = 'Viewer mode. Firebase not connected.';
+      alert(msg);
+      return;
+    }
+
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    const result = await auth.signInWithPopup(provider);
+    currentUser = result.user;
+    isAdmin = !!currentUser && ADMIN_EMAILS.map(normalizeEmail).includes(normalizeEmail(currentUser.email));
+
+    updateAdminUI();
+
+    if (!isAdmin) {
+      const msg = `This Google account is not the admin account.\n\nLogged in as: ${currentUser ? currentUser.email : 'Unknown'}\nRequired admin: ${ADMIN_EMAILS.join(', ')}`;
+      if (authError) authError.innerText = msg;
+      alert(msg);
+    }
+  } catch (error) {
+    console.error('Google popup login failed:', error);
+    const friendly = error && error.code === 'auth/popup-closed-by-user'
+      ? 'Google login popup was closed before signing in.'
+      : error && error.code === 'auth/popup-blocked'
+        ? 'Popup was blocked by the browser. Allow popups for this Netlify site and try again.'
+        : (error.message || String(error));
+
+    if (authError) authError.innerText = friendly;
+    if (authStatus) authStatus.innerText = 'Login failed. Try again.';
+    alert('Login failed: ' + friendly);
+  }
+}
+
+function logoutAdmin() {
+  if (auth) auth.signOut();
+}
+
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+  const section = document.getElementById(id);
+  if (section) section.classList.remove('hidden');
+}
+
+function normalizeRow(row) {
+  const out = {};
+  Object.keys(row).forEach(k => out[String(k).trim()] = row[k]);
+  return out;
+}
+
+async function readExcelRows(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { defval: '' }).map(normalizeRow);
+}
+
+async function loadExcelData() {
+  if (!requireAdmin()) return;
+  try {
+    const d1p = document.getElementById('division1PlayersFile').files[0];
+    const d2p = document.getElementById('division2PlayersFile').files[0];
+    const d1f = document.getElementById('division1FixturesFile').files[0];
+    const d2f = document.getElementById('division2FixturesFile').files[0];
+    const status = document.getElementById('importStatus');
+
+    if (!d1p || !d2p || !d1f || !d2f) {
+      alert('Please upload all 4 Excel files.');
+      return;
+    }
+
+    teams = [];
+    players = [];
+    fixtures = [];
+
+    status.innerText = 'Importing files...';
+
+    await importPlayersExcel(d1p, 1);
+    await importPlayersExcel(d2p, 2);
+    await importFixturesExcel(d1f, 1);
+    await importFixturesExcel(d2f, 2);
+
+    saveDatabase();
+    renderAll();
+    showSection('dashboard');
+
+    status.innerText = `Imported ${teams.length} teams, ${players.length} players, ${fixtures.length} fixtures.`;
+    alert('Import completed successfully.');
+  } catch (err) {
+    console.error(err);
+    alert('Import failed: ' + err.message);
+  }
+}
+
+async function importPlayersExcel(file, division) {
+  const rows = await readExcelRows(file);
+  rows.forEach(row => {
+    const playerName = String(row.Player || '').trim();
+    const teamName = String(row.Team || '').trim();
+    if (!playerName || !teamName) return;
+
+    if (!teams.find(t => t.name === teamName)) {
+      teams.push({ name: teamName, division, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, gd: 0, points: 0 });
+    }
+
+    players.push({
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+      name: playerName,
+      team: teamName,
+      position: String(row.Position || 'N/A').trim(),
+      overall: Number(row.Rating) || 0,
+      goals: 0,
+      assists: 0,
+      cleanSheets: 0,
+      ratingChecks: 0,
+      matches: 0
+    });
+  });
+}
+
+async function importFixturesExcel(file, division) {
+  const rows = await readExcelRows(file);
+  rows.forEach(row => {
+    const home = String(row.Home || '').trim();
+    const away = String(row.Away || '').trim();
+    if (!home || !away) return;
+
+    fixtures.push({
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+      division,
+      matchday: row.Matchday || '',
+      home,
+      away,
+      played: false,
+      homeGoals: null,
+      awayGoals: null,
+      statEntries: [],
+      cleanSheet: 'None'
+    });
+  });
+}
+
+function renderAll() {
+  recalculatePlayerStats();
+  recalculateTables();
+  renderDashboard();
+  renderDashboardHighlights();
+  renderTeams();
+  renderFixtures();
+  renderTables();
+  populateTransferDropdowns();
+  populateClubSelect();
+  renderClubPage();
+  renderPlayerProfileList();
+  renderAwards();
+  renderSeasonArchiveHome();
+  renderDefaultLeaderboard();
+}
+
+function renderDashboard() {
+  document.getElementById('div1Count').innerText = teams.filter(t => t.division === 1).length;
+  document.getElementById('div2Count').innerText = teams.filter(t => t.division === 2).length;
+  document.getElementById('playerCount').innerText = players.length;
+  document.getElementById('fixtureCount').innerText = fixtures.length;
+}
+
+function renderDashboardHighlights() {
+  const topGoal = [...players].sort((a, b) => b.goals - a.goals)[0];
+  const topAssist = [...players].sort((a, b) => b.assists - a.assists)[0];
+  const topCS = [...players].sort((a, b) => b.cleanSheets - a.cleanSheets)[0];
+  const latest = fixtures.filter(f => f.played).slice(-6).reverse();
+
+  const scorerBox = document.getElementById('dashboardTopScorer');
+  const assistBox = document.getElementById('dashboardTopAssist');
+  const csBox = document.getElementById('dashboardTopCleanSheet');
+  const latestBox = document.getElementById('dashboardLatestResults');
+
+  if (scorerBox) scorerBox.innerHTML = topGoal ? `<div class="text-3xl font-black">${topGoal.name}</div><div class="text-gray-400">${topGoal.team}</div><div class="text-5xl font-black mt-3">${topGoal.goals}</div>` : 'No data';
+  if (assistBox) assistBox.innerHTML = topAssist ? `<div class="text-3xl font-black">${topAssist.name}</div><div class="text-gray-400">${topAssist.team}</div><div class="text-5xl font-black mt-3">${topAssist.assists}</div>` : 'No data';
+  if (csBox) csBox.innerHTML = topCS ? `<div class="text-3xl font-black">${topCS.name}</div><div class="text-gray-400">${topCS.team}</div><div class="text-5xl font-black mt-3">${topCS.cleanSheets}</div>` : 'No data';
+  if (latestBox) latestBox.innerHTML = latest.length ? latest.map(f => `<div class="bg-gray-800 p-4 rounded-xl"><div class="text-sm text-gray-400">Division ${f.division} | MD ${f.matchday}</div><div class="text-xl font-bold">${f.home} ${f.homeGoals} - ${f.awayGoals} ${f.away}</div><div class="text-gray-400 text-sm mt-1">${generateMatchReport(f)}</div></div>`).join('') : '<div class="text-gray-400">No results yet.</div>';
+}
+
+function renderTeams() {
+  const container = document.getElementById('teamsContainer');
+  container.innerHTML = '';
+  if (!teams.length) {
+    container.innerHTML = '<div class="text-red-400 text-xl">No teams loaded.</div>';
+    return;
+  }
+
+  teams.forEach(team => {
+    const teamPlayers = players.filter(p => p.team === team.name);
+    container.innerHTML += `
+      <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800">
+        <h3 class="text-2xl font-bold mb-2">${team.name}</h3>
+        <p class="text-gray-400 mb-4">Division ${team.division}</p>
+        <div class="space-y-2">
+          ${teamPlayers.map(p => `<div class="bg-gray-800 p-3 rounded-xl flex justify-between"><span>${p.name}</span><span>${p.position} | ${p.overall} OVR | ${p.goals}G ${p.assists}A</span></div>`).join('')}
+        </div>
+      </div>`;
+  });
+}
+
+function renderFixtures() {
+  const c1 = document.getElementById('fixturesDivision1Container');
+  const c2 = document.getElementById('fixturesDivision2Container');
+  c1.innerHTML = fixtureFilterHtml(1);
+  c2.innerHTML = fixtureFilterHtml(2);
+
+  [1, 2].forEach(div => {
+    const container = div === 1 ? c1 : c2;
+    const selectedMatchday = document.getElementById(`matchdayFilter${div}`)?.value || 'ALL';
+    const divFixtures = fixtures.filter(f => f.division === div && (selectedMatchday === 'ALL' || String(f.matchday) === String(selectedMatchday)));
+    if (!divFixtures.length) {
+      container.innerHTML += `<div class="text-red-400 text-xl">No Division ${div} fixtures found for selected matchday.</div>`;
+      return;
+    }
+
+    divFixtures.forEach(f => {
+      container.innerHTML += `
+        <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 flex justify-between items-center">
+          <div>
+            <div class="text-sm text-gray-400">Matchday ${f.matchday}</div>
+            <div class="text-2xl font-bold mt-1">${f.home} vs ${f.away}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-xl font-bold">${f.played ? `${f.homeGoals} - ${f.awayGoals}` : 'Not Played'}</div>
+            <button onclick="openMatchCenter('${f.id}')" class="mt-2 bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg text-sm font-bold">${isAdmin || !onlineMode ? (f.played ? 'Edit Result' : 'Enter Result') : 'View Match'}</button>
+          </div>
+        </div>`;
+    });
+  });
+}
+
+function fixtureFilterHtml(division) {
+  const matchdays = [...new Set(fixtures.filter(f => f.division === division).map(f => f.matchday))].filter(x => x !== '').sort((a, b) => Number(a) - Number(b));
+  return `
+    <div class="mb-6 bg-gray-900 border border-gray-800 rounded-2xl p-4 flex items-center gap-4">
+      <label class="text-gray-400">Filter Matchday</label>
+      <select id="matchdayFilter${division}" onchange="renderFixtures()" class="bg-gray-800 p-3 rounded-xl">
+        <option value="ALL">All Matchdays</option>
+        ${matchdays.map(md => `<option value="${md}">Matchday ${md}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderTables() {
+  document.getElementById('division1Table').innerHTML = tableRows(1);
+  document.getElementById('division2Table').innerHTML = tableRows(2);
+}
+
+function tableRows(division) {
+  return teams
+    .filter(t => t.division === division)
+    .sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
+    .map(t => `<tr class="border-b border-gray-800 text-center"><td class="p-3 text-left">${t.name}</td><td>${t.played}</td><td>${t.wins}</td><td>${t.draws}</td><td>${t.losses}</td><td>${t.gf}</td><td>${t.ga}</td><td>${t.gd}</td><td>${t.points}</td></tr>`)
+    .join('');
+}
+
+function openMatchCenter(id) {
+  selectedFixtureId = id;
+  const f = fixtures.find(x => x.id === id);
+  if (!f) return;
+
+  document.getElementById('matchTitle').innerText = `Match Center: ${f.home} vs ${f.away}`;
+  document.getElementById('homeTeamNameBig').innerText = f.home;
+  document.getElementById('awayTeamNameBig').innerText = f.away;
+  document.getElementById('homeStatsTitle').innerText = `${f.home} Team Sheet`;
+  document.getElementById('awayStatsTitle').innerText = `${f.away} Team Sheet`;
+
+  document.getElementById('homeStatsContainer').innerHTML = '';
+  document.getElementById('awayStatsContainer').innerHTML = '';
+
+  renderTeamSheet('home', f.home, f.statEntries || []);
+  renderTeamSheet('away', f.away, f.statEntries || []);
+  updateAutoScore();
+
+  showSection('matchCenter');
+}
+
+function renderTeamSheet(side, teamName, existingEntries) {
+  const container = document.getElementById(`${side}StatsContainer`);
+  const squad = players.filter(p => p.team === teamName);
+
+  if (!squad.length) {
+    container.innerHTML = `<div class="text-red-400">No players found for ${teamName}</div>`;
+    return;
+  }
+
+  squad.forEach(player => {
+    const saved = existingEntries.find(e => e.playerId === player.id || e.player === player.name) || {};
+    container.innerHTML += teamSheetRowHtml(side, player, saved);
+  });
+}
+
+function teamSheetRowHtml(side, player, saved = {}) {
+  const started = saved.started ? 'checked' : '';
+  const goals = saved.goals || 0;
+  const assists = saved.assists || 0;
+  const ratingChecked = saved.ratingChecked ? 'checked' : '';
+  const cleanSheet = saved.cleanSheet ? '✅' : '-';
+
+  return `
+    <div class="grid grid-cols-12 gap-2 items-center bg-gray-800 p-3 rounded-xl ${side}SheetRow" data-player-id="${player.id}" data-player-name="${player.name}" data-team="${player.team}" data-position="${player.position}">
+      <div class="col-span-1 text-center">
+        <input type="checkbox" class="${side}Started w-5 h-5" ${started} />
+      </div>
+
+      <div class="col-span-4 font-bold truncate">${player.name}</div>
+      <div class="col-span-1 text-gray-300">${player.position}</div>
+      <div class="col-span-1 text-gray-300">${player.overall}</div>
+
+      <div class="col-span-1">
+        <input type="number" class="${side}Goals w-full min-w-[70px] bg-gray-900 p-3 rounded-lg text-center text-lg font-bold" value="${goals}" min="0" onchange="updateAutoScore()" onkeyup="updateAutoScore()" />
+      </div>
+
+      <div class="col-span-1">
+        <input type="number" class="${side}Assists w-full min-w-[70px] bg-gray-900 p-3 rounded-lg text-center text-lg font-bold" value="${assists}" min="0" />
+      </div>
+
+      <div class="col-span-2">
+        <label class="flex items-center justify-center h-full">
+          <input type="checkbox" class="${side}Rating w-5 h-5" ${ratingChecked} />
+        </label>
+      </div>
+
+      <div class="col-span-1 text-center cleanSheetPreview">${cleanSheet}</div>
+    </div>`;
+}
+
+function updateAutoScore() {
+  const homeGoals = [...document.querySelectorAll('.homeGoals')].reduce((sum, el) => sum + (Number(el.value) || 0), 0);
+  const awayGoals = [...document.querySelectorAll('.awayGoals')].reduce((sum, el) => sum + (Number(el.value) || 0), 0);
+
+  document.getElementById('autoHomeScore').innerText = homeGoals;
+  document.getElementById('autoAwayScore').innerText = awayGoals;
+
+  updateCleanSheetPreview(homeGoals, awayGoals);
+}
+
+function isCleanSheetEligible(position) {
+  return ['GK', 'DEF'].includes(String(position || '').toUpperCase());
+}
+
+function updateCleanSheetPreview(homeGoals, awayGoals) {
+  document.querySelectorAll('.homeSheetRow, .awaySheetRow').forEach(row => {
+    const side = row.classList.contains('homeSheetRow') ? 'home' : 'away';
+    const started = row.querySelector(`.${side}Started`).checked;
+    const position = row.dataset.position;
+    const eligible = isCleanSheetEligible(position);
+    const gotCleanSheet = (side === 'home' && awayGoals === 0 && started && eligible) || (side === 'away' && homeGoals === 0 && started && eligible);
+    row.querySelector('.cleanSheetPreview').innerText = gotCleanSheet ? '✅' : '-';
+  });
+}
+
+function submitResult() {
+  if (!requireAdmin()) return;
+  const f = fixtures.find(x => x.id === selectedFixtureId);
+  if (!f) return alert('No fixture selected.');
+
+  updateAutoScore();
+
+  f.played = true;
+  f.homeGoals = Number(document.getElementById('autoHomeScore').innerText) || 0;
+  f.awayGoals = Number(document.getElementById('autoAwayScore').innerText) || 0;
+  f.statEntries = [];
+
+  collectTeamSheetEntries('home', f.home, f.statEntries, f.homeGoals, f.awayGoals);
+  collectTeamSheetEntries('away', f.away, f.statEntries, f.homeGoals, f.awayGoals);
+
+  recalculatePlayerStats();
+  recalculateTables();
+  saveDatabase();
+  renderAll();
+
+  alert('Match result saved.');
+  showSection(f.division === 1 ? 'fixturesDivision1' : 'fixturesDivision2');
+}
+
+function collectTeamSheetEntries(side, team, output, homeGoals, awayGoals) {
+  document.querySelectorAll(`.${side}SheetRow`).forEach(row => {
+    const started = row.querySelector(`.${side}Started`).checked;
+    const goals = Number(row.querySelector(`.${side}Goals`).value) || 0;
+    const assists = Number(row.querySelector(`.${side}Assists`).value) || 0;
+    const ratingChecked = row.querySelector(`.${side}Rating`).checked;
+    const position = row.dataset.position;
+    const cleanSheet = (side === 'home' && awayGoals === 0 && started && isCleanSheetEligible(position)) ||
+                       (side === 'away' && homeGoals === 0 && started && isCleanSheetEligible(position));
+
+    output.push({
+      playerId: row.dataset.playerId,
+      player: row.dataset.playerName,
+      team,
+      position,
+      started,
+      goals,
+      assists,
+      ratingChecked,
+      cleanSheet
+    });
+  });
+}
+
+function recalculateTables() {
+  teams.forEach(t => Object.assign(t, { played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, gd: 0, points: 0 }));
+  fixtures.filter(f => f.played).forEach(f => {
+    const home = teams.find(t => t.name === f.home);
+    const away = teams.find(t => t.name === f.away);
+    if (!home || !away) return;
+    home.played++; away.played++;
+    home.gf += f.homeGoals; home.ga += f.awayGoals;
+    away.gf += f.awayGoals; away.ga += f.homeGoals;
+    if (f.homeGoals > f.awayGoals) { home.wins++; away.losses++; home.points += 3; }
+    else if (f.awayGoals > f.homeGoals) { away.wins++; home.losses++; away.points += 3; }
+    else { home.draws++; away.draws++; home.points++; away.points++; }
+    home.gd = home.gf - home.ga;
+    away.gd = away.gf - away.ga;
+  });
+}
+
+function recalculatePlayerStats() {
+  players.forEach(p => Object.assign(p, {
+    goals: 0,
+    assists: 0,
+    cleanSheets: 0,
+    ratingChecks: 0,
+    matches: 0,
+    starts: 0
+  }));
+
+  fixtures.filter(f => f.played).forEach(f => {
+    (f.statEntries || []).forEach(e => {
+      const p = players.find(x => x.id === e.playerId || (x.name === e.player && x.team === e.team));
+      if (!p) return;
+
+      p.goals += Number(e.goals) || 0;
+      p.assists += Number(e.assists) || 0;
+      if (e.cleanSheet) p.cleanSheets++;
+      if (e.started) p.starts++;
+
+      if (e.ratingChecked) {
+        p.ratingChecks++;
+      }
+
+      if (e.started || Number(e.goals) > 0 || Number(e.assists) > 0 || e.ratingChecked) {
+        p.matches++;
+      }
+    });
+  });
+}
+
+function getRatingChecks(p) {
+  return p.ratingChecks || 0;
+}
+
+function populateClubSelect() {
+  const select = document.getElementById('clubSelect');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = teams.map(t => `<option value="${t.name}">${t.name} - Division ${t.division}</option>`).join('');
+  if (current && teams.find(t => t.name === current)) select.value = current;
+}
+
+function getTeamForm(teamName, count = 5) {
+  return fixtures
+    .filter(f => f.played && (f.home === teamName || f.away === teamName))
+    .slice(-count)
+    .map(f => {
+      const isHome = f.home === teamName;
+      const gf = isHome ? f.homeGoals : f.awayGoals;
+      const ga = isHome ? f.awayGoals : f.homeGoals;
+      if (gf > ga) return 'W';
+      if (gf < ga) return 'L';
+      return 'D';
+    });
+}
+
+function renderClubPage() {
+  const container = document.getElementById('clubPageContainer');
+  const select = document.getElementById('clubSelect');
+  if (!container || !select || !teams.length) return;
+
+  const teamName = select.value || teams[0]?.name;
+  const team = teams.find(t => t.name === teamName);
+  if (!team) return;
+
+  const squad = players.filter(p => p.team === teamName).sort((a, b) => b.overall - a.overall);
+  const results = fixtures.filter(f => f.played && (f.home === teamName || f.away === teamName)).slice(-8).reverse();
+  const upcoming = fixtures.filter(f => !f.played && (f.home === teamName || f.away === teamName)).slice(0, 8);
+  const form = getTeamForm(teamName);
+  const topScorer = [...squad].sort((a, b) => b.goals - a.goals)[0];
+
+  container.innerHTML = `
+    <div class="grid grid-cols-3 gap-6 mb-6">
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 col-span-2">
+        <h3 class="text-4xl font-black mb-2">${team.name}</h3>
+        <p class="text-gray-400 mb-4">Division ${team.division}</p>
+        <div class="grid grid-cols-7 gap-3 text-center">
+          <div><div class="text-gray-400">P</div><div class="text-2xl font-bold">${team.played}</div></div>
+          <div><div class="text-gray-400">W</div><div class="text-2xl font-bold">${team.wins}</div></div>
+          <div><div class="text-gray-400">D</div><div class="text-2xl font-bold">${team.draws}</div></div>
+          <div><div class="text-gray-400">L</div><div class="text-2xl font-bold">${team.losses}</div></div>
+          <div><div class="text-gray-400">GD</div><div class="text-2xl font-bold">${team.gd}</div></div>
+          <div><div class="text-gray-400">Pts</div><div class="text-2xl font-bold">${team.points}</div></div>
+          <div><div class="text-gray-400">Form</div><div class="text-2xl font-bold">${form.join(' ') || '-'}</div></div>
+        </div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+        <h4 class="text-xl font-bold mb-2">Top Scorer</h4>
+        <div class="text-3xl font-black">${topScorer?.name || '-'}</div>
+        <div class="text-5xl font-black mt-3 text-yellow-400">${topScorer?.goals || 0}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+        <h4 class="text-2xl font-bold mb-4">Squad</h4>
+        <div class="space-y-2 max-h-[500px] overflow-y-auto">${squad.map(p => `<button onclick="showPlayerProfile('${p.id}')" class="w-full bg-gray-800 hover:bg-green-500 p-3 rounded-xl flex justify-between"><span>${p.name}</span><span>${p.position} | ${p.overall}</span></button>`).join('')}</div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+        <h4 class="text-2xl font-bold mb-4">Recent Results</h4>
+        <div class="space-y-2">${results.map(f => `<div class="bg-gray-800 p-3 rounded-xl">MD ${f.matchday}: ${f.home} ${f.homeGoals}-${f.awayGoals} ${f.away}</div>`).join('') || '<div class="text-gray-400">No results.</div>'}</div>
+      </div>
+      <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+        <h4 class="text-2xl font-bold mb-4">Upcoming Fixtures</h4>
+        <div class="space-y-2">${upcoming.map(f => `<div class="bg-gray-800 p-3 rounded-xl">MD ${f.matchday}: ${f.home} vs ${f.away}</div>`).join('') || '<div class="text-gray-400">No fixtures.</div>'}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPlayerProfileList() {
+  const list = document.getElementById('playerProfileList');
+  if (!list) return;
+  const search = document.getElementById('playerSearchInput')?.value?.toLowerCase() || '';
+  const filtered = players.filter(p => p.name.toLowerCase().includes(search) || p.team.toLowerCase().includes(search)).slice(0, 60);
+  list.innerHTML = filtered.map(p => `<button onclick="showPlayerProfile('${p.id}')" class="bg-gray-900 border border-gray-800 hover:border-green-500 rounded-2xl p-4 text-left"><div class="text-xl font-bold">${p.name}</div><div class="text-gray-400">${p.team}</div><div class="mt-2">${p.position} | ${p.overall} OVR</div><div class="text-sm text-gray-400 mt-2">${p.goals}G ${p.assists}A ${p.cleanSheets}CS ${p.ratingChecks || 0}R</div></button>`).join('');
+}
+
+function showPlayerProfile(playerId) {
+  const p = players.find(x => x.id === playerId);
+  const container = document.getElementById('playerProfileDetails');
+  if (!p || !container) return;
+  const matches = fixtures.filter(f => f.played && (f.statEntries || []).some(e => e.playerId === p.id || (e.player === p.name && e.team === p.team))).slice().reverse();
+  container.innerHTML = `
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+      <div class="flex justify-between items-start mb-6">
+        <div><h3 class="text-5xl font-black">${p.name}</h3><p class="text-gray-400 text-xl mt-2">${p.team} | ${p.position} | ${p.overall} OVR</p></div>
+        <div class="text-right"><div class="text-gray-400">Ratings Checked</div><div class="text-5xl font-black text-green-400">${p.ratingChecks || 0}</div></div>
+      </div>
+      <div class="grid grid-cols-5 gap-4 text-center mb-6">
+        <div class="bg-gray-800 p-4 rounded-xl"><div class="text-gray-400">Goals</div><div class="text-4xl font-black">${p.goals}</div></div>
+        <div class="bg-gray-800 p-4 rounded-xl"><div class="text-gray-400">Assists</div><div class="text-4xl font-black">${p.assists}</div></div>
+        <div class="bg-gray-800 p-4 rounded-xl"><div class="text-gray-400">Clean Sheets</div><div class="text-4xl font-black">${p.cleanSheets}</div></div>
+        <div class="bg-gray-800 p-4 rounded-xl"><div class="text-gray-400">Matches</div><div class="text-4xl font-black">${p.matches}</div></div>
+        <div class="bg-gray-800 p-4 rounded-xl"><div class="text-gray-400">Starts</div><div class="text-4xl font-black">${p.starts || 0}</div></div>
+      </div>
+      <h4 class="text-2xl font-bold mb-3">Match Log</h4>
+      <div class="space-y-2">${matches.map(f => `<div class="bg-gray-800 p-3 rounded-xl">Division ${f.division} MD ${f.matchday}: ${f.home} ${f.homeGoals}-${f.awayGoals} ${f.away}</div>`).join('') || '<div class="text-gray-400">No match log yet.</div>'}</div>
+    </div>`;
+  showSection('playerProfiles');
+}
+
+function renderAwards() {
+  const c = document.getElementById('awardsContainer');
+  if (!c) return;
+  const topGoal = [...players].sort((a, b) => b.goals - a.goals)[0];
+  const topAssist = [...players].sort((a, b) => b.assists - a.assists)[0];
+  const topCS = [...players].sort((a, b) => b.cleanSheets - a.cleanSheets)[0];
+  const topRated = [...players].sort((a, b) => (b.ratingChecks || 0) - (a.ratingChecks || 0))[0];
+  const bestTeam = [...teams].sort((a, b) => b.points - a.points || b.gd - a.gd)[0];
+  const cards = [
+    ['Golden Boot', topGoal?.name, topGoal?.team, topGoal?.goals || 0],
+    ['Playmaker Award', topAssist?.name, topAssist?.team, topAssist?.assists || 0],
+    ['Golden Glove', topCS?.name, topCS?.team, topCS?.cleanSheets || 0],
+    ['Most Rated', topRated?.name, topRated?.team, topRated?.ratingChecks || 0],
+    ['Club of the Season', bestTeam?.name, `Division ${bestTeam?.division || '-'}`, bestTeam?.points || 0]
+  ];
+  c.innerHTML = cards.map(card => `<div class="bg-gray-900 border border-gray-800 rounded-2xl p-6"><div class="text-gray-400">${card[0]}</div><div class="text-3xl font-black mt-3">${card[1] || '-'}</div><div class="text-gray-400 mt-1">${card[2] || '-'}</div><div class="text-5xl font-black mt-4 text-yellow-400">${card[3]}</div></div>`).join('');
+}
+
+function renderSeasonArchiveHome() {
+  const c = document.getElementById('seasonArchiveContainer');
+  if (!c) return;
+  const champions = [1, 2].map(div => teams.filter(t => t.division === div).sort((a, b) => b.points - a.points || b.gd - a.gd)[0]);
+  c.innerHTML = `<div class="grid grid-cols-2 gap-6">${champions.map((t, i) => `<div class="bg-gray-900 border border-gray-800 rounded-2xl p-6"><div class="text-gray-400">Current Division ${i + 1} Leader</div><div class="text-4xl font-black mt-3">${t?.name || '-'}</div><div class="text-5xl font-black mt-4 text-green-400">${t?.points || 0} pts</div></div>`).join('')}</div>`;
+}
+
+function generateMatchReport(f) {
+  if (!f.played) return '';
+  const winner = f.homeGoals > f.awayGoals ? f.home : f.awayGoals > f.homeGoals ? f.away : null;
+  if (!winner) return `${f.home} and ${f.away} played out a ${f.homeGoals}-${f.awayGoals} draw.`;
+  const loser = winner === f.home ? f.away : f.home;
+  return `${winner} defeated ${loser} ${f.homeGoals}-${f.awayGoals}.`;
+}
+
+function exportSeasonArchive() {
+  const archive = { exportedAt: new Date().toISOString(), teams, players, fixtures };
+  const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'season_archive_backup.json';
+  a.click();
+}
+
+function downloadMatchReports() {
+  const reports = fixtures.filter(f => f.played).map(f => `Division ${f.division} MD ${f.matchday}: ${generateMatchReport(f)}`).join('\n');
+  const blob = new Blob([reports], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'match_reports.txt';
+  a.click();
+}
+
+function showPromotionRelegationPreview() {
+  const div1 = teams.filter(t => t.division === 1).sort((a, b) => a.points - b.points || a.gd - b.gd).slice(0, 2);
+  const div2 = teams.filter(t => t.division === 2).sort((a, b) => b.points - a.points || b.gd - a.gd).slice(0, 2);
+  const c = document.getElementById('seasonArchiveContainer');
+  if (!c) return;
+  c.innerHTML = `
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-red-950 border border-red-800 rounded-2xl p-6"><h3 class="text-3xl font-bold mb-4">Relegation Preview</h3>${div1.map(t => `<div class="bg-red-900 p-3 rounded-xl mb-2">⬇ ${t.name} - ${t.points} pts</div>`).join('')}</div>
+      <div class="bg-green-950 border border-green-800 rounded-2xl p-6"><h3 class="text-3xl font-bold mb-4">Promotion Preview</h3>${div2.map(t => `<div class="bg-green-900 p-3 rounded-xl mb-2">⬆ ${t.name} - ${t.points} pts</div>`).join('')}</div>
+    </div>`;
+}
+
+function renderDefaultLeaderboard() {
+  const container = document.getElementById('leaderboardContainer');
+  if (container) renderLeaderboard('allGoals');
+}
+
+function showLeaderboardTab(type) {
+  renderLeaderboard(type);
+}
+
+function renderLeaderboard(type) {
+  const container = document.getElementById('leaderboardContainer');
+  if (!container) return;
+
+  let division = null;
+  let stat = 'goals';
+  let title = 'Top Scorers';
+
+  if (type.startsWith('div1')) division = 1;
+  if (type.startsWith('div2')) division = 2;
+
+  if (type.includes('Goals')) {
+    stat = 'goals';
+    title = 'Goals';
+  } else if (type.includes('Assists')) {
+    stat = 'assists';
+    title = 'Assists';
+  } else if (type.includes('CleanSheets')) {
+    stat = 'cleanSheets';
+    title = 'Clean Sheets';
+  } else if (type.includes('Ratings')) {
+    stat = 'ratingChecks';
+    title = 'Ratings Checked';
+  }
+
+  const divisionLabel = division ? `Division ${division}` : 'All Divisions';
+
+  const rows = players
+    .filter(p => {
+      if (!division) return true;
+      return teams.find(t => t.name === p.team)?.division === division;
+    })
+    .map(p => ({
+      player: p.name,
+      team: p.team,
+      position: p.position,
+      overall: p.overall,
+      value: Number(p[stat]) || 0
+    }))
+    .sort((a, b) => b.value - a.value || b.overall - a.overall || a.player.localeCompare(b.player));
+
+  container.innerHTML = `
+    <h3 class="text-3xl font-bold mb-4">${divisionLabel} - ${title}</h3>
+    <table class="w-full bg-gray-950 rounded-xl overflow-hidden">
+      <thead class="bg-green-500 text-black">
+        <tr>
+          <th class="p-3 text-left">Rank</th>
+          <th class="p-3 text-left">Player</th>
+          <th class="p-3 text-left">Team</th>
+          <th class="p-3 text-left">Position</th>
+          <th class="p-3 text-left">OVR</th>
+          <th class="p-3 text-left">${title}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r, i) => `
+          <tr class="border-b border-gray-800">
+            <td class="p-3">${i + 1}</td>
+            <td class="p-3 font-bold">${r.player}</td>
+            <td class="p-3">${r.team}</td>
+            <td class="p-3">${r.position}</td>
+            <td class="p-3">${r.overall}</td>
+            <td class="p-3 text-xl font-bold">${r.value}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function populateTransferDropdowns() {
+  const transfer = document.getElementById('transferPlayer');
+  const clubs = document.getElementById('newClub');
+  const newPlayerTeam = document.getElementById('newPlayerTeam');
+  transfer.innerHTML = players.map(p => `<option>${p.name}</option>`).join('');
+  const teamOptions = teams.map(t => `<option>${t.name}</option>`).join('');
+  clubs.innerHTML = teamOptions;
+  newPlayerTeam.innerHTML = teamOptions;
+}
+
+function transferPlayer() {
+  if (!requireAdmin()) return;
+  const playerName = document.getElementById('transferPlayer').value;
+  const newClub = document.getElementById('newClub').value;
+  const p = players.find(x => x.name === playerName);
+  if (!p) return;
+  p.team = newClub;
+  saveDatabase();
+  renderAll();
+  alert(`${playerName} transferred to ${newClub}. Stats moved with player.`);
+}
+
+function addPlayer() {
+  if (!requireAdmin()) return;
+  const name = document.getElementById('newPlayerName').value.trim();
+  const team = document.getElementById('newPlayerTeam').value;
+  const position = document.getElementById('newPlayerPosition').value.trim() || 'N/A';
+  const overall = Number(document.getElementById('newPlayerRating').value) || 70;
+  if (!name || !team) return alert('Enter player name and team.');
+
+  players.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), name, team, position, overall, goals: 0, assists: 0, cleanSheets: 0, ratingChecks: 0, matches: 0 });
+  saveDatabase();
+  renderAll();
+  alert('Player added.');
+}
+
+function exportPlayers() {
+  recalculatePlayerStats();
+  const fullStats = players.map((p, i) => ({ Rank: i + 1, Player: p.name, Team: p.team, Position: p.position, Overall: p.overall, Goals: p.goals, Assists: p.assists, 'Clean Sheets': p.cleanSheets, 'Ratings Checked': getRatingChecks(p), Matches: p.matches }));
+  const topScorers = [...fullStats].sort((a, b) => b.Goals - a.Goals);
+  const topAssists = [...fullStats].sort((a, b) => b.Assists - a.Assists);
+  const topRatings = [...fullStats].sort((a, b) => b['Ratings Checked'] - a['Ratings Checked']);
+  const matchHistory = fixtures.filter(f => f.played).map(f => ({ Division: f.division, Matchday: f.matchday, Home: f.home, Away: f.away, Score: `${f.homeGoals}-${f.awayGoals}`, 'Clean Sheet': f.cleanSheet }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullStats.filter(p => teams.find(t => t.name === p.Team)?.division === 1)), 'Division 1 Stats');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullStats.filter(p => teams.find(t => t.name === p.Team)?.division === 2)), 'Division 2 Stats');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(topScorers), 'Top Scorers');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(topAssists), 'Top Assists');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(topRatings), 'Top Ratings');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchHistory), 'Match History');
+  XLSX.writeFile(wb, 'complete_league_stats.xlsx');
+}
+
+function exportTables() {
+  recalculateTables();
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(teams.filter(t => t.division === 1)), 'Division 1 Table');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(teams.filter(t => t.division === 2)), 'Division 2 Table');
+  XLSX.writeFile(wb, 'league_tables.xlsx');
+}
+
+async function saveDatabase() {
+  if (!requireAdmin()) return;
+  const data = {
+    teams,
+    players,
+    fixtures,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (onlineMode && db) {
+    await db.collection('leagueData').doc(LEAGUE_DOC_ID).set(data);
+  } else {
+    localStorage.setItem('league_teams', JSON.stringify(teams));
+    localStorage.setItem('league_players', JSON.stringify(players));
+    localStorage.setItem('league_fixtures', JSON.stringify(fixtures));
+  }
+}
+
+function loadDatabase() {
+  if (onlineMode && db) {
+    db.collection('leagueData').doc(LEAGUE_DOC_ID).onSnapshot(snapshot => {
+      if (!snapshot.exists) {
+        renderAll();
+        const status = document.getElementById('importStatus');
+        if (status) status.innerText = 'Online mode active. No league data uploaded yet.';
+        return;
+      }
+
+      const data = snapshot.data();
+      teams = data.teams || [];
+      players = data.players || [];
+      fixtures = data.fixtures || [];
+      renderAll();
+
+      const status = document.getElementById('importStatus');
+      if (status) status.innerText = `Online mode active. Last update: ${data.updatedAt ? new Date(data.updatedAt).toLocaleString() : 'Unknown'}`;
+    }, error => {
+      console.error(error);
+      alert('Could not load online data. Check Firebase rules/config.');
+    });
+  } else {
+    teams = JSON.parse(localStorage.getItem('league_teams') || '[]');
+    players = JSON.parse(localStorage.getItem('league_players') || '[]');
+    fixtures = JSON.parse(localStorage.getItem('league_fixtures') || '[]');
+    renderAll();
+  }
+}
+
+async function resetDatabase() {
+  if (!requireAdmin()) return;
+  if (!confirm('Delete all saved league data?')) return;
+
+  teams = [];
+  players = [];
+  fixtures = [];
+
+  if (onlineMode && db) {
+    await saveDatabase();
+  } else {
+    localStorage.removeItem('league_teams');
+    localStorage.removeItem('league_players');
+    localStorage.removeItem('league_fixtures');
+  }
+
+  renderAll();
+  document.getElementById('importStatus').innerText = 'All data reset.';
+  alert('All data reset.');
+}
+
+// Force viewer mode by default until Firebase auth confirms admin.
+isAdmin = false;
+
+window.addEventListener('DOMContentLoaded', () => {
+  initFirebase();
+  loadDatabase();
+  updateAdminUI();
+});
+
+// Make sure inline HTML buttons can always find these functions on Netlify.
+// Make sure inline HTML buttons can always find these functions on Netlify.
+window.loginWithGoogle = loginWithGoogle;
+window.logoutAdmin = logoutAdmin;
+window.loadExcelData = loadExcelData;
+window.submitResult = submitResult;
+window.resetDatabase = resetDatabase;
+window.transferPlayer = transferPlayer;
+window.addPlayer = addPlayer;
+window.showLeaderboardTab = showLeaderboardTab;
+window.renderClubPage = renderClubPage;
+window.renderPlayerProfileList = renderPlayerProfileList;
+window.showPlayerProfile = showPlayerProfile;
+window.exportSeasonArchive = exportSeasonArchive;
+window.downloadMatchReports = downloadMatchReports;
+window.showPromotionRelegationPreview = showPromotionRelegationPreview;
+window.renderFixtures = renderFixtures;
+window.openMatchCenter = openMatchCenter;
+window.updateAutoScore = updateAutoScore;
+window.showSection = showSection;
+window.exportPlayers = exportPlayers;
+window.exportTables = exportTables;
+</script>
+</body>
+</html>
